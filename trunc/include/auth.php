@@ -85,7 +85,7 @@ function CheckAuth($strReloadPage, $strLogPage)
 // 認証状態をログオフする
 function LogoffAuth()
 {
-	session_start();
+	if(!isset($_SESSION)){ session_start(); }
 	$_SESSION = array(); // セッション変数を全てクリア
 	session_destroy(); // セッションファイルを削除
 
