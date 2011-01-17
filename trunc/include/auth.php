@@ -102,8 +102,20 @@ function ChangePassword($strReloadPage, $strLogPage)
 		if(isset($_POST['newuser']) && isset($_POST['password1']) && isset($_POST['password2'])){
 			// パスワードの変更
 			if($_POST['password1'] === $_POST['password2']){
-				ChangeAuthFile($_POST['newuser'], $_POST['password1']);
-				return('ユーザ名とパスワードを変更しました');
+				// 禁止文字、文字列長さのチェック
+				if(!preg_match("/^[A-Za-z0-9\-]+$/", $_POST['newuser']) || !preg_match("/^[A-Za-z0-9\-]+$/", $_POST['password1']) ||
+						strlen($_POST['newuser']) > 20 || strlen($_POST['password1']) > 20){
+					return('Error : ユーザ名とパスワードは20文字以内、A-Z,a-z,0-9の文字しか許容されません');
+				}
+				else{
+					// ユーザ名・パスワードの変更
+					if(ChangeAuthFile($_POST['newuser'], $_POST['password1']) > 0){
+						return('ユーザ名とパスワードを変更しました');
+					}
+					else{
+						return('Error : 認証ファイル '.$strAuthDataFile.' に書き込めません');
+					}
+				}
 			}
 			return('Error : パスワードが一致しません');
 		}
@@ -152,6 +164,12 @@ function CheckUser($strNewUser, $strNewPassword)
 	global $strAuthDataFile;
 	$strUser = '';
 	$strPassword = '';
+
+	// 禁止文字、文字列長さのチェック
+	if(!preg_match("/^[A-Za-z0-9\-]+$/", $strNewUser) || !preg_match("/^[A-Za-z0-9\-]+$/", $strNewPassword) ||
+			strlen($strNewUser) > 20 || strlen($strNewPassword) > 20){
+		return('');
+	}
 	
 	$flag_ok = 0;
 
@@ -186,6 +204,7 @@ function CheckUser($strNewUser, $strNewPassword)
 }
 
 
+// 認証ファイルに新ユーザ名、パスワードをセットする
 function ChangeAuthFile($strNewUser, $strNewPassword)
 {
 	global $strAuthDataFile;
@@ -194,6 +213,10 @@ function ChangeAuthFile($strNewUser, $strNewPassword)
 		fwrite($fh, "# user, password\n");
 		fwrite($fh, $strNewUser.",".md5($strNewPassword)."\n");
 		fclose($fh);
+		return(1);		// 成功
+	}
+	else{
+		return(-1);	// 失敗
 	}
 
 }
