@@ -105,7 +105,7 @@ if(!$strReturn)
 	if ($dir = opendir($strBaseDir)) {
 		while (($file = readdir($dir)) !== false) {
 			if ($file != "." && $file != ".." && is_dir($strBaseDir.$file)) {
-				print "<li class=\"repo\"><a class=\"repo\">".htmlspecialchars($file)."</a></li>\n";
+				print "<li class=\"repo\"><a class=\"repo\" href=\"$strFilenameThis?mode=repo&reponame=".htmlspecialchars($file)."\">".htmlspecialchars($file)."</a></li>\n";
 			}
 		} 
 		closedir($dir);
@@ -117,9 +117,12 @@ if(!$strReturn)
 
 <?php
 
-//print("<p>Subversion 新リポジトリ作成 （svnadmin create ~/var/svn/[repo]）</p>\n");
 
-if(isset($_POST['newrepo']) && strlen($_POST['newrepo'])>0){
+// *********************
+// 新規リポジトリ作成
+// *********************
+if(isset($_GET['mode']) && $_GET['mode'] === 'makerepo' && 
+	isset($_POST['newrepo']) && strlen($_POST['newrepo'])>0){
 	// 新規リポジトリ作成（リポジトリ名が与えられた場合）
 	$strNewRepo = trim($_POST['newrepo']);
 	print("<h1>Create New Repository (リポジトリ作成)</h1>\n");
@@ -154,6 +157,9 @@ if(isset($_POST['newrepo']) && strlen($_POST['newrepo'])>0){
 	}
 
 }
+// *********************
+// ログアウト
+// *********************
 elseif(isset($_GET['mode']) && $_GET['mode'] === 'logout'){
 	LogoffAuth();
 ?>
@@ -161,17 +167,91 @@ elseif(isset($_GET['mode']) && $_GET['mode'] === 'logout'){
 <p>ログアウトしました</p>
 <?php
 }
+// *********************
+// ユーザ名・パスワード変更
+// *********************
 elseif(isset($_GET['mode']) && $_GET['mode'] === 'chgpasswd'){
 	print("<h1>Change User and Password (ユーザ名、パスワード変更)</h1>\n");
 	print("<p>".ChangePassword($strFilenameThis, 'svnadmin-create')."</p>\n");
 }
+// *********************
+// 既存リポジトリ指定
+// *********************
+elseif(isset($_GET['mode']) && $_GET['mode'] === 'repo' && isset($_GET['reponame'])){
+	$strRepo = $_GET['reponame'];
+	print("<h1>Existing Repository (既存リポジトリ)</h1>\n");
+	print("<p>リポジトリ名 : ".htmlspecialchars($strRepo)."</p>\n");
+	if(!preg_match("/^[A-Za-z0-9\-]+$/", $strRepo) || $strRepo[0] == '-' || $strRepo[strlen($strRepo)-1] == '-' || strlen($strRepo) > 20 || strlen($strRepo) <= 0){
+		print("<p class=\"error\">不正なリポジトリ名が指定されました</p>\n");
+	}
+	else{
+		exec($strSvnCmdPath."svnlook youngest ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
+		if($nResult != 0){ print("<p class=\"error\">svnlook youngestコマンドが実行できません</p>\n"); }
+		else{
+			if(count($arrStdout) >= 1){ $strRevNo = $arrStdout[0]; }
+			else{ $strRevNo = ''; }
+		}
+		$arrStdout = array();
+		exec($strSvnCmdPath."svnlook author ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
+		if($nResult != 0){ print("<p class=\"error\">svnlook authorコマンドが実行できません</p>\n"); }
+		else{
+			if(count($arrStdout) >= 1){ $strAuthor = $arrStdout[0]; }
+			else{ $strAuthor = ''; }
+		}
+		$arrStdout = array();
+		exec($strSvnCmdPath."svnlook date ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
+		if($nResult != 0){ print("<p class=\"error\">svnlook dateコマンドが実行できません</p>\n"); }
+		else{
+			if(count($arrStdout) >= 1){ $strDate = $arrStdout[0]; }
+			else{ $strDate = ''; }
+		}
+		
+		print("<p>直近にコミットしたユーザ : ".$strAuthor."</p>\n");
+		print("<p>直近のコミット日時 : ".$strDate."</p>\n");
+		print("<p>リビジョン no : ".$strRevNo."</p>\n");
+		
+		print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=verify&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." をベリファイする (svnadmin verify)</a></p>\n");
+		print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=recover&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." のエラー回復を行う (svnadmin recover)</a></p>\n");
+		print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=hotcopy&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." をバックアップする (svnadmin hotcopy)</a></p>\n");
+		print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=dump&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." をバックアップ（ダンプ）する (svnadmin dump)</a></p>\n");
+		print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=remove&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." を削除する</a></p>\n");
+	}
+}
+// *********************
+// 既存リポジトリのベリファイ
+// *********************
+elseif(isset($_GET['mode']) && $_GET['mode'] === 'verify' && isset($_GET['reponame'])){
+	$strRepo = $_GET['reponame'];
+	print("<h1>Verify Repository (既存リポジトリのベリファイ)</h1>\n");
+	print("<p>リポジトリ名 : ".htmlspecialchars($strRepo)."</p>\n");
+	if(!preg_match("/^[A-Za-z0-9\-]+$/", $strRepo) || $strRepo[0] == '-' || $strRepo[strlen($strRepo)-1] == '-' || strlen($strRepo) > 20 || strlen($strRepo) <= 0){
+		print("<p class=\"error\">不正なリポジトリ名が指定されました</p>\n");
+	}
+	else{
+		exec($strSvnCmdPath."svnadmin verify ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
+		if($nResult != 0){ print("<p class=\"error\">svnadmin verifyコマンドが実行できません</p>\n"); }
+		else{
+			// コマンドのStdout出力がある場合
+			if(count($arrStdout)>0){
+				print("<pre>\n\n");
+				foreach($arrStdout as $str){
+					print($str."\n");
+				}
+				print("</pre>\n");
+			}
+		}
+	}
+}
+// *********************
+// 新規リポジトリ作成 入力画面
+// *********************
 else{
 	// 引数が何もなかった場合、新規リポジトリ名の入力画面を表示
 ?>
 <h1>Create New Repository (リポジトリ作成)</h1>
 <p>svnadmin create コマンドを実行して新しいリポジトリを作成します。</p>
 <p>&nbsp;</p>
-<form method="post" action="./<?php echo $strFilenameThis; ?>" name="form1">
+<form method="post" action="./<?php echo $strFilenameThis; ?>?mode=makerepo" name="form1">
 	<p>作成するリポジトリ名&nbsp;&nbsp;&nbsp;<input name="newrepo" type="text" size="25" />&nbsp;&nbsp;<input type="submit" value="新規作成" /></p>
 <p>&nbsp;</p>
 <p style="color:gray;">リポジトリ名には半角アルファベット・数字・横線（A-Z, a-z, 0-9, -）のみ利用できます。<br />
