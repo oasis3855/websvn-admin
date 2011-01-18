@@ -18,11 +18,18 @@
 // $strSvnCmdPath = '';
 
 
-
 // ***** svn repositoy parent directory *****
 // this string must end with '/'.
 
 // $strBaseDir = '/var/svn/';
+// $strBaseDir = '/home/user0000/var/svn/';
+
+
+// ***** repositoy backup/trash directory *****
+// this string must end with '/'.
+
+// $strBackupDir = '/var/svn-backup/';
+// $strBackupDir = '/home/user0000/var/svn-backup/';
 
 
 ?>

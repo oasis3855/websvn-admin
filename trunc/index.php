@@ -57,7 +57,7 @@ require_once('include/auth.php');		// ユーザ認証
 $strFilenameThis = htmlspecialchars(basename($_SERVER['PHP_SELF']));
 
 // config.php で設定が行われているか確認する
-if(!isset($strSvnCmdPath) || !isset($strBaseDir)){
+if(!isset($strSvnCmdPath) || !isset($strBaseDir) || !isset($strBackupDir)){
 	print("<p class=\"error\">include/config.php の初期設定が行われていません</p>\n");
 	print("</body>\n</html>\n");
 	die;
@@ -93,6 +93,9 @@ if(!$strReturn)
 
 ?>
 <div id="main_content_left">
+<h2>System</h2>
+<p><?php echo date('Y/m/d  H:i:s', time()) ; ?></p>
+<p>SVN <?php echo get_svn_version(); ?></p>
 <h2>Menu</h2>
 <ul>
 <li><a href="<?php echo $strFilenameThis;?>">Home</a></li>
@@ -102,10 +105,14 @@ if(!$strReturn)
 <h2>Repositories</h2>
 <ul>
 <?php
+
+// *********************
+// 既存リポジトリ一覧を表示（左側ペイン）
+// *********************
 	if ($dir = opendir($strBaseDir)) {
 		while (($file = readdir($dir)) !== false) {
 			if ($file != "." && $file != ".." && is_dir($strBaseDir.$file)) {
-				print "<li class=\"repo\"><a class=\"repo\" href=\"$strFilenameThis?mode=repo&reponame=".htmlspecialchars($file)."\">".htmlspecialchars($file)."</a></li>\n";
+				print "<li class=\"repo\"><a class=\"repo\" href=\"$strFilenameThis?mode=inforepo&reponame=".htmlspecialchars($file)."\">".htmlspecialchars($file)."</a></li>\n";
 			}
 		} 
 		closedir($dir);
@@ -175,72 +182,32 @@ elseif(isset($_GET['mode']) && $_GET['mode'] === 'chgpasswd'){
 	print("<p>".ChangePassword($strFilenameThis, 'svnadmin-create')."</p>\n");
 }
 // *********************
-// 既存リポジトリ指定
+// 既存リポジトリの情報表示（バックアップ、削除サブメニュー表示）
 // *********************
-elseif(isset($_GET['mode']) && $_GET['mode'] === 'repo' && isset($_GET['reponame'])){
+elseif(isset($_GET['mode']) && $_GET['mode'] === 'inforepo' && isset($_GET['reponame'])){
 	$strRepo = $_GET['reponame'];
-	print("<h1>Existing Repository (既存リポジトリ)</h1>\n");
-	print("<p>リポジトリ名 : ".htmlspecialchars($strRepo)."</p>\n");
-	if(!preg_match("/^[A-Za-z0-9\-]+$/", $strRepo) || $strRepo[0] == '-' || $strRepo[strlen($strRepo)-1] == '-' || strlen($strRepo) > 20 || strlen($strRepo) <= 0){
-		print("<p class=\"error\">不正なリポジトリ名が指定されました</p>\n");
-	}
-	else{
-		exec($strSvnCmdPath."svnlook youngest ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
-		if($nResult != 0){ print("<p class=\"error\">svnlook youngestコマンドが実行できません</p>\n"); }
-		else{
-			if(count($arrStdout) >= 1){ $strRevNo = $arrStdout[0]; }
-			else{ $strRevNo = ''; }
-		}
-		$arrStdout = array();
-		exec($strSvnCmdPath."svnlook author ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
-		if($nResult != 0){ print("<p class=\"error\">svnlook authorコマンドが実行できません</p>\n"); }
-		else{
-			if(count($arrStdout) >= 1){ $strAuthor = $arrStdout[0]; }
-			else{ $strAuthor = ''; }
-		}
-		$arrStdout = array();
-		exec($strSvnCmdPath."svnlook date ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
-		if($nResult != 0){ print("<p class=\"error\">svnlook dateコマンドが実行できません</p>\n"); }
-		else{
-			if(count($arrStdout) >= 1){ $strDate = $arrStdout[0]; }
-			else{ $strDate = ''; }
-		}
-		
-		print("<p>直近にコミットしたユーザ : ".$strAuthor."</p>\n");
-		print("<p>直近のコミット日時 : ".$strDate."</p>\n");
-		print("<p>リビジョン no : ".$strRevNo."</p>\n");
-		
-		print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=verify&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." をベリファイする (svnadmin verify)</a></p>\n");
-		print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=recover&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." のエラー回復を行う (svnadmin recover)</a></p>\n");
-		print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=hotcopy&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." をバックアップする (svnadmin hotcopy)</a></p>\n");
-		print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=dump&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." をバックアップ（ダンプ）する (svnadmin dump)</a></p>\n");
-		print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=remove&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." を削除する</a></p>\n");
-	}
+	info_repository($strRepo);
 }
 // *********************
 // 既存リポジトリのベリファイ
 // *********************
 elseif(isset($_GET['mode']) && $_GET['mode'] === 'verify' && isset($_GET['reponame'])){
 	$strRepo = $_GET['reponame'];
-	print("<h1>Verify Repository (既存リポジトリのベリファイ)</h1>\n");
-	print("<p>リポジトリ名 : ".htmlspecialchars($strRepo)."</p>\n");
-	if(!preg_match("/^[A-Za-z0-9\-]+$/", $strRepo) || $strRepo[0] == '-' || $strRepo[strlen($strRepo)-1] == '-' || strlen($strRepo) > 20 || strlen($strRepo) <= 0){
-		print("<p class=\"error\">不正なリポジトリ名が指定されました</p>\n");
-	}
-	else{
-		exec($strSvnCmdPath."svnadmin verify ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
-		if($nResult != 0){ print("<p class=\"error\">svnadmin verifyコマンドが実行できません</p>\n"); }
-		else{
-			// コマンドのStdout出力がある場合
-			if(count($arrStdout)>0){
-				print("<pre>\n\n");
-				foreach($arrStdout as $str){
-					print($str."\n");
-				}
-				print("</pre>\n");
-			}
-		}
-	}
+	verify_repository($strRepo);
+}
+// *********************
+// 既存リポジトリのバックアップ（hotcopy）
+// *********************
+elseif(isset($_GET['mode']) && $_GET['mode'] === 'hotcopy' && isset($_GET['reponame'])){
+	$strRepo = $_GET['reponame'];
+	hotcopy_repository($strRepo);
+}
+// *********************
+// 既存リポジトリのバックアップ（dump）
+// *********************
+elseif(isset($_GET['mode']) && $_GET['mode'] === 'dump' && isset($_GET['reponame'])){
+	$strRepo = $_GET['reponame'];
+	dump_repository($strRepo);
 }
 // *********************
 // 新規リポジトリ作成 入力画面
@@ -258,6 +225,211 @@ else{
 また、既存のリポジトリ名と同じリポジトリは作成できません。</p>
 </form>
 <?php
+}
+
+
+// *********************
+// 既存リポジトリの情報表示（バックアップ、削除サブメニュー表示）
+// *********************
+function info_repository($strRepo) {
+	global $strSvnCmdPath;
+	global $strBaseDir;
+
+	print("<h1>Repository Administration (リポジトリ管理)</h1>\n");
+	print("<p>リポジトリ名 : ".htmlspecialchars($strRepo)."</p>\n");
+
+	// リポジトリ名に不正な文字が入っていないか検査
+	if(!preg_match("/^[A-Za-z0-9\-]+$/", $strRepo) || $strRepo[0] == '-' || $strRepo[strlen($strRepo)-1] == '-' || strlen($strRepo) > 20 || strlen($strRepo) <= 0){
+		print("<p class=\"error\">不正なリポジトリ名が指定されました</p>\n");
+		return;
+	}
+
+	// リポジトリの最終リビジョン番号を読み取る
+	$strRevNo = '';
+	exec($strSvnCmdPath."svnlook youngest ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
+	if($nResult != 0){
+		print("<p class=\"error\">svnlook youngestコマンドが実行できません</p>\n");
+		return;
+	}
+	if(count($arrStdout) >= 1){ $strRevNo = $arrStdout[0]; }
+	$arrStdout = array();
+
+	// リポジトリの最終変更ユーザ名を読み取る
+	$strAuthor = '';
+	exec($strSvnCmdPath."svnlook author ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
+	if($nResult != 0){
+		print("<p class=\"error\">svnlook authorコマンドが実行できません</p>\n");
+		return;
+	}
+	if(count($arrStdout) >= 1){ $strAuthor = $arrStdout[0]; }
+	$arrStdout = array();
+
+	// リポジトリの最終変更日時を読み取る
+	$strDate = '';
+	exec($strSvnCmdPath."svnlook date ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
+	if($nResult != 0){
+		print("<p class=\"error\">svnlook dateコマンドが実行できません</p>\n");
+		return;
+	}
+	if(count($arrStdout) >= 1){ $strDate = $arrStdout[0]; }
+	
+	print("<p>直近にコミットしたユーザ : ".$strAuthor."</p>\n");
+	print("<p>直近のコミット日時 : ".$strDate."</p>\n");
+	print("<p>リビジョン no : ".$strRevNo."</p>\n");
+
+	print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=verify&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." をベリファイする (svnadmin verify)</a></p>\n");
+	print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=recover&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." のエラー回復を行う (svnadmin recover)</a></p>\n");
+	print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=hotcopy&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." をバックアップする (svnadmin hotcopy)</a></p>\n");
+	print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=dump&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." をバックアップ（ダンプ）する (svnadmin dump)</a></p>\n");
+	print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=remove&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." を削除する</a></p>\n");
+
+}
+
+// *********************
+// 既存リポジトリのベリファイ
+// *********************
+function verify_repository($strRepo) {
+	global $strSvnCmdPath;
+	global $strBaseDir;
+
+	print("<h1>Verify Repository (ベリファイ)</h1>\n");
+	print("<p>リポジトリ名 : ".htmlspecialchars($strRepo)."</p>\n");
+
+	// リポジトリ名に不正な文字が入っていないか検査
+	if(!preg_match("/^[A-Za-z0-9\-]+$/", $strRepo) || $strRepo[0] == '-' || $strRepo[strlen($strRepo)-1] == '-' || strlen($strRepo) > 20 || strlen($strRepo) <= 0){
+		print("<p class=\"error\">不正なリポジトリ名が指定されました</p>\n");
+		return;
+	}
+
+	// ベリファイコマンドを実行
+	exec($strSvnCmdPath."svnadmin verify ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
+	if($nResult != 0){
+		print("<p class=\"error\">svnadmin verifyコマンドが実行できません</p>\n");
+		return;
+	}
+
+	// コマンドのStdout出力がある場合
+	if(count($arrStdout)>0){
+		print("<pre>\n\n");
+		foreach($arrStdout as $str){
+			print($str."\n");
+		}
+		print("</pre>\n");
+		print("<p class=\"info\">ベリファイが完了しました</p>\n");
+	}
+	else{
+		print("<p class=\"info\">svnadminコマンドの出力無し。エラーの可能性あり</p>\n");
+	}
+}
+
+// *********************
+// 既存リポジトリのバックアップ（hotcopy）
+// *********************
+function hotcopy_repository($strRepo) {
+	global $strSvnCmdPath;
+	global $strBaseDir;
+	global $strBackupDir;
+
+	print("<h1>Backup (hotcopy) Repository (バックアップ : hotcopy)</h1>\n");
+	print("<p>リポジトリ名 : ".htmlspecialchars($strRepo)."</p>\n");
+
+	// リポジトリ名に不正な文字が入っていないか検査
+	if(!preg_match("/^[A-Za-z0-9\-]+$/", $strRepo) || $strRepo[0] == '-' || $strRepo[strlen($strRepo)-1] == '-' || strlen($strRepo) > 20 || strlen($strRepo) <= 0){
+		print("<p class=\"error\">不正なリポジトリ名が指定されました</p>\n");
+		return;
+	}
+
+	// バックアップ先ディレクトリが既存でないか検査
+	$strBackupBasename = $strRepo.'-'.date('Ymd-Hi', time());
+	if(file_exists($strBackupDir.$strBackupBasename)){
+		print("<p class=\"error\">バックアップ先に同じ名称のディレクトリがあります</p>\n");
+		return;
+	}
+
+	print("<p>コマンド実行中 ... (svnadmin hotcopy ".htmlspecialchars($strRepo)." ".htmlspecialchars($strBackupBasename).")</p>\n");
+
+	// バックアップコマンドを実行
+	exec($strSvnCmdPath."svnadmin hotcopy ".$strBaseDir.$strRepo." ".$strBackupDir.$strBackupBasename." 2>&1", $arrStdout, $nResult);
+	if($nResult != 0){
+		print("<p class=\"error\">バックアップに失敗しました</p>\n");
+		return;
+	}
+	// コマンドのStdout出力がある場合
+	if(count($arrStdout)>0){
+		print("<pre>\n\n");
+		foreach($arrStdout as $str){
+			print($str."\n");
+		}
+		print("</pre>\n");
+	}
+	else{
+		print("<p class=\"ok\">バックアップが完了しました</p>\n");
+	}
+	return;
+}
+
+// *********************
+// 既存リポジトリのバックアップ（dump）
+// *********************
+function dump_repository($strRepo) {
+	global $strSvnCmdPath;
+	global $strBaseDir;
+	global $strBackupDir;
+
+	print("<h1>Backup (dump) Repository (バックアップ : dump)</h1>\n");
+	print("<p>リポジトリ名 : ".htmlspecialchars($strRepo)."</p>\n");
+
+	// リポジトリ名に不正な文字が入っていないか検査
+	if(!preg_match("/^[A-Za-z0-9\-]+$/", $strRepo) || $strRepo[0] == '-' || $strRepo[strlen($strRepo)-1] == '-' || strlen($strRepo) > 20 || strlen($strRepo) <= 0){
+		print("<p class=\"error\">不正なリポジトリ名が指定されました</p>\n");
+		return;
+	}
+
+	// バックアップ先ディレクトリが既存でないか検査
+	$strBackupBasename = $strRepo.'-'.date('Ymd-Hi', time()).'.txt';
+	if(file_exists($strBackupDir.$strBackupBasename)){
+		print("<p class=\"error\">バックアップ先に同じ名称のファイルがあります</p>\n");
+		return;
+	}
+
+	print("<p>コマンド実行中 ... (svnadmin dump ".htmlspecialchars($strRepo)." &gt; ".htmlspecialchars($strBackupBasename).")</p>\n");
+
+	// バックアップコマンドを実行
+	exec($strSvnCmdPath."svnadmin dump ".$strBaseDir.$strRepo." > ".$strBackupDir.$strBackupBasename." 2>&1", $arrStdout, $nResult);
+	if($nResult != 0){
+		print("<p class=\"error\">バックアップに失敗しました</p>\n");
+		return;
+	}
+	// コマンドのStdout出力がある場合
+	if(count($arrStdout)>0){
+		print("<pre>\n\n");
+		foreach($arrStdout as $str){
+			print($str."\n");
+		}
+		print("</pre>\n");
+	}
+	else{
+		print("<p class=\"ok\">バックアップが完了しました</p>\n");
+	}
+	return;
+}
+
+// *********************
+// svnコマンドのバージョン番号（文字列）を返す関数
+// *********************
+function get_svn_version() {
+
+	global $strSvnCmdPath;
+	global $strBaseDir;
+	$strSvnVersion = '';
+	
+	exec($strSvnCmdPath."svnlook --version 2>&1", $arrStdout, $nResult);
+	if($nResult == 0){
+		if(preg_match('~([0-9]+)\.([0-9]+)\.([0-9]+)~', $arrStdout[0], $matches)) {
+			$strSvnVersion = $matches[0];
+		}
+	}
+	return($strSvnVersion);
 }
 ?>
 
