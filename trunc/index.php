@@ -2,6 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja" lang="ja">
 <?php
 
+$strVersion = '0.2';	// 画面に表示するバージョン
 // ******************************************************
 // Software name : WebSVN Administrator
 //
@@ -40,7 +41,7 @@
 	<script type="text/javascript" src="../utf.js"></script>
 	<script type="text/javascript" src="../md5.js"></script>
 	<script type="text/javascript" src="../authpage_form_md5.js"></script>
-	
+
 </head>
 <body>
 
@@ -94,75 +95,42 @@ if(!$strReturn)
 ?>
 <div id="main_content_left">
 <h2>System</h2>
-<p><?php echo date('Y/m/d  H:i:s', time()) ; ?></p>
-<p>SVN <?php echo get_svn_version(); ?></p>
+<p><?php echo date('Y/m/d  H:i:s', time()) ; ?><br />
+WebSVN-Admin &nbsp;<?php echo $strVersion; ?><br />
+Subversion &nbsp;<?php echo get_svn_version(); ?></p>
 <h2>Menu</h2>
 <ul>
 <li><a href="<?php echo $strFilenameThis;?>">Home</a></li>
+<li><a href="<?php echo $strFilenameThis;?>?mode=backuplist">Backup Catalog</a></li>
 <li><a href="<?php echo $strFilenameThis; ?>?mode=chgpasswd">Change Password</a></li>
 <li><a href="<?php echo $strFilenameThis; ?>?mode=logout">Logout</a></li>
 </ul>
 <h2>Repositories</h2>
-<ul>
 <?php
 
 // *********************
 // 既存リポジトリ一覧を表示（左側ペイン）
 // *********************
-	if ($dir = opendir($strBaseDir)) {
-		while (($file = readdir($dir)) !== false) {
-			if ($file != "." && $file != ".." && is_dir($strBaseDir.$file)) {
-				print "<li class=\"repo\"><a class=\"repo\" href=\"$strFilenameThis?mode=inforepo&reponame=".htmlspecialchars($file)."\">".htmlspecialchars($file)."</a></li>\n";
-			}
-		} 
-		closedir($dir);
-	}
+display_repositories();
+
 ?>
-</ul>
 </div>	<!-- id="main_content_left" -->
 <div id="main_content_right">
 
 <?php
 
-
+// *********************
+// バックアップディレクトリの一覧
+// *********************
+if(isset($_GET['mode']) && $_GET['mode'] === 'backuplist'){
+	display_backup_list();
+}
 // *********************
 // 新規リポジトリ作成
 // *********************
-if(isset($_GET['mode']) && $_GET['mode'] === 'makerepo' && 
-	isset($_POST['newrepo']) && strlen($_POST['newrepo'])>0){
-	// 新規リポジトリ作成（リポジトリ名が与えられた場合）
-	$strNewRepo = trim($_POST['newrepo']);
-	print("<h1>Create New Repository (リポジトリ作成)</h1>\n");
-	print("<p class=\"info\">新しいリポジトリ『".htmlspecialchars($strNewRepo)."』が有効なディテクトリ名かチェック中 ...</p>\n");
-
-	if(preg_match("/^[A-Za-z0-9\-]+$/", $strNewRepo) && $strNewRepo[0] != '-' && $strNewRepo[strlen($strNewRepo)-1] != '-' && strlen($strNewRepo) <= 20){
-		if(file_exists($strBaseDir.$strNewRepo) || is_dir($strBaseDir.$strNewRepo)){
-			print("<p class=\"error\">指定されたリポジトリ名はすでに存在するディレクトリかファイル名です</p>");
-		}
-		else{
-			print("<p class=\"info\">リポジトリ作成コマンド実行中 (svnamin create ".htmlspecialchars($strNewRepo).") ...</p>");
-//			$strResult = system("/home/tmg1136-inue/local/bin/svnadmin create ".$strBaseDir.$strNewRepo." 2>&1", $nResult);
-			exec($strSvnCmdPath."svnadmin create ".$strBaseDir.$strNewRepo." 2>&1", $arrStdout, $nResult);
-
-			// 結果判定
-			if($nResult == 0){ print("<p class=\"ok\">コマンドが正しく実行されました</p>\n"); }
-			else{ print("<p class=\"error\">実行エラー</p>\n"); }
-
-			// コマンドのStdout出力がある場合
-			if(count($arrStdout)>0){
-				print("<pre>\n\n");
-				foreach($arrStdout as $str){
-					print($str."\n");
-				}
-				print("</pre>\n");
-			}
-
-		}
-	}
-	else{
-		print("<p class=\"error\">指定されたリポジトリ名が、命名規則から外れています。<br />20文字を越える、許容文字(A-Z,a-z,0-9,-)以外、先頭末尾に - など</p>");
-	}
-
+elseif(isset($_GET['mode']) && $_GET['mode'] === 'makerepo' && isset($_POST['newrepo']) && strlen($_POST['newrepo'])>0){
+	$strRepo = trim($_POST['newrepo']);
+	create_new_repository($strRepo);
 }
 // *********************
 // ログアウト
@@ -200,7 +168,7 @@ elseif(isset($_GET['mode']) && $_GET['mode'] === 'verify' && isset($_GET['repona
 // *********************
 elseif(isset($_GET['mode']) && $_GET['mode'] === 'hotcopy' && isset($_GET['reponame'])){
 	$strRepo = $_GET['reponame'];
-	hotcopy_repository($strRepo);
+	hotcopy_repository($strRepo, 0);
 }
 // *********************
 // 既存リポジトリのバックアップ（dump）
@@ -210,11 +178,67 @@ elseif(isset($_GET['mode']) && $_GET['mode'] === 'dump' && isset($_GET['reponame
 	dump_repository($strRepo);
 }
 // *********************
+// リポジトリの削除
+// *********************
+elseif(isset($_GET['mode']) && $_GET['mode'] === 'remove' && isset($_GET['reponame'])){
+	$strRepo = $_GET['reponame'];
+	remove_repository($strRepo);
+}
+// *********************
 // 新規リポジトリ作成 入力画面
 // *********************
 else{
 	// 引数が何もなかった場合、新規リポジトリ名の入力画面を表示
+	input_new_repository();
+}
+
 ?>
+</div>	<!-- id="main_content_right" -->
+<p>&nbsp;</p>
+<div class="clear"></div>
+<div id="footer">
+<p><a href="http://sourceforge.jp/projects/websvn-admin/">WebSVN-Admin</a> version <?php echo $strVersion; ?> &nbsp;&nbsp; GNU GPL free software</p>
+</div>	<!-- id="footer" -->
+
+</body>
+</html>
+<?php
+
+exit();
+
+// *********************
+// 既存リポジトリ一覧を表示（左側ペイン）
+// *********************
+function display_repositories() {
+	global $strBaseDir;
+
+	$arrDirs = array();
+	if ($dir = opendir($strBaseDir)) {
+		while (($file = readdir($dir)) !== false) {
+			if ($file != "." && $file != ".." && is_dir($strBaseDir.$file)) {
+				array_push($arrDirs, $file);
+			}
+		} 
+		closedir($dir);
+	}
+
+	sort($arrDirs);
+
+	print("<ul>\n");
+	foreach($arrDirs as $val){
+		print "<li class=\"repo\"><a class=\"repo\" href=\"$strFilenameThis?mode=inforepo&amp;reponame=".htmlspecialchars($val)."\">".htmlspecialchars($val)."</a></li>\n";
+	}
+	print("</ul>\n");
+
+}
+
+
+// *********************
+// 新規リポジトリ名入力画面
+// *********************
+function input_new_repository() {
+?>
+
 <h1>Create New Repository (リポジトリ作成)</h1>
 <p>svnadmin create コマンドを実行して新しいリポジトリを作成します。</p>
 <p>&nbsp;</p>
@@ -224,9 +248,51 @@ else{
 <p style="color:gray;">リポジトリ名には半角アルファベット・数字・横線（A-Z, a-z, 0-9, -）のみ利用できます。<br />
 また、既存のリポジトリ名と同じリポジトリは作成できません。</p>
 </form>
+
 <?php
 }
 
+
+// *********************
+// 新規リポジトリ作成
+// *********************
+function create_new_repository($strRepo) {
+	global $strSvnCmdPath;
+	global $strBaseDir;
+
+	print("<h1>Create New Repository (リポジトリ作成)</h1>\n");
+	print("<p class=\"info\">新しいリポジトリ『".htmlspecialchars($strRepo)."』が有効なディテクトリ名かチェック中 ...</p>\n");
+
+	// リポジトリ名に不正な文字が入っていないか検査
+	if(!preg_match("/^[A-Za-z0-9\-]+$/", $strRepo) || $strRepo[0] == '-' || $strRepo[strlen($strRepo)-1] == '-' || strlen($strRepo) > 20 || strlen($strRepo) <= 0){
+		print("<p class=\"error\">指定されたリポジトリ名が、命名規則から外れています。<br />20文字を越える、許容文字(A-Z,a-z,0-9,-)以外、先頭末尾に - など</p>");
+		return;
+	}
+
+	// すでに存在するディレクトリ名は却下
+	if(file_exists($strBaseDir.$strRepo)){
+		print("<p class=\"error\">指定されたリポジトリ名はすでに存在するディレクトリかファイル名です</p>");
+		return;
+	}
+
+	// 新規リポジトリ作成
+	print("<p class=\"info\">リポジトリ作成コマンド実行中 (svnamin create ".htmlspecialchars($strRepo).") ...</p>");
+	exec($strSvnCmdPath."svnadmin create ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
+
+	// 結果判定
+	if($nResult == 0){ print("<p class=\"ok\">コマンドが正しく実行されました</p>\n"); }
+	else{ print("<p class=\"error\">実行エラー</p>\n"); }
+
+	// コマンドのStdout出力がある場合
+	if(count($arrStdout)>0){
+		print("<pre>\n\n");
+		foreach($arrStdout as $str){
+			print($str."\n");
+		}
+		print("</pre>\n");
+	}
+
+}
 
 // *********************
 // 既存リポジトリの情報表示（バックアップ、削除サブメニュー表示）
@@ -277,12 +343,18 @@ function info_repository($strRepo) {
 	print("<p>直近のコミット日時 : ".$strDate."</p>\n");
 	print("<p>リビジョン no : ".$strRevNo."</p>\n");
 
-	print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=verify&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." をベリファイする (svnadmin verify)</a></p>\n");
-	print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=recover&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." のエラー回復を行う (svnadmin recover)</a></p>\n");
-	print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=hotcopy&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." をバックアップする (svnadmin hotcopy)</a></p>\n");
-	print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=dump&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." をバックアップ（ダンプ）する (svnadmin dump)</a></p>\n");
-	print("<p><a class=\"repo\" href=\"$strFilenameThis?mode=remove&reponame=".htmlspecialchars($strRepo)."\">".htmlspecialchars($strRepo)." を削除する</a></p>\n");
-
+	$arrCmd = array(
+		array('verify', 'ベリファイ'),
+//		array('recover', 'エラー回復'),
+		array('hotcopy', 'バックアップ（Hotcopy）'),
+		array('dump', 'バックアップ（Dump）'),
+		array('remove', '削除'),
+	);
+	
+	foreach($arrCmd as $val){
+		print("<form method=\"post\" action=\"./".$strFilenameThis."?mode=".$val[0]."&amp;reponame=".htmlspecialchars($strRepo)."\" name=\"form1\" class=\"horiz\"><input type=\"submit\" value=\"".$val[1]."\" /></form>\n");
+	}
+	
 }
 
 // *********************
@@ -325,13 +397,15 @@ function verify_repository($strRepo) {
 // *********************
 // 既存リポジトリのバックアップ（hotcopy）
 // *********************
-function hotcopy_repository($strRepo) {
+function hotcopy_repository($strRepo, $flag_mode) {
 	global $strSvnCmdPath;
 	global $strBaseDir;
 	global $strBackupDir;
 
-	print("<h1>Backup (hotcopy) Repository (バックアップ : hotcopy)</h1>\n");
-	print("<p>リポジトリ名 : ".htmlspecialchars($strRepo)."</p>\n");
+	if($flag_mode == 0){
+		print("<h1>Backup (hotcopy) Repository (バックアップ : hotcopy)</h1>\n");
+		print("<p>リポジトリ名 : ".htmlspecialchars($strRepo)."</p>\n");
+	}
 
 	// リポジトリ名に不正な文字が入っていないか検査
 	if(!preg_match("/^[A-Za-z0-9\-]+$/", $strRepo) || $strRepo[0] == '-' || $strRepo[strlen($strRepo)-1] == '-' || strlen($strRepo) > 20 || strlen($strRepo) <= 0){
@@ -415,6 +489,77 @@ function dump_repository($strRepo) {
 }
 
 // *********************
+// リポジトリの削除
+// *********************
+function remove_repository($strRepo) {
+	global $strSvnCmdPath;
+	global $strBaseDir;
+
+	print("<h1>Remove Repository (リポジトリ削除)</h1>\n");
+	print("<p>リポジトリ名 : ".htmlspecialchars($strRepo)."</p>\n");
+
+	// リポジトリ名に不正な文字が入っていないか検査
+	if(!preg_match("/^[A-Za-z0-9\-]+$/", $strRepo) || $strRepo[0] == '-' || $strRepo[strlen($strRepo)-1] == '-' || strlen($strRepo) > 20 || strlen($strRepo) <= 0){
+		print("<p class=\"error\">不正なリポジトリ名が指定されました</p>\n");
+		return;
+	}
+
+	// バックアップ（hotcopy）
+	print("<p class=\"info\">削除前に、バックアップを行います</p>\n");
+	hotcopy_repository($strRepo, 1);
+
+	print("<p>コマンド実行中 ... (rm -rfv ".htmlspecialchars($strRepo).")</p>\n");
+
+	// 削除
+	exec("rm -rfv ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
+	if($nResult != 0){
+		print("<p class=\"error\">削除に失敗しました</p>\n");
+		return;
+	}
+	// コマンドのStdout出力がある場合
+	if(count($arrStdout)>0){
+		print("<pre>\n\n");
+		print("$ rm -rfv ".htmlspecialchars($strRepo)."\n\n");
+		foreach($arrStdout as $str){
+			print($str."\n");
+		}
+		print("</pre>\n");
+	}
+	print("<p class=\"ok\">削除が完了しました</p>\n");
+
+}
+
+
+// *********************
+// バックアップ一覧を表示する
+// *********************
+function display_backup_list() {
+	global $strBackupDir;
+
+	print("<h1>Backup Catalog</h1>\n");
+
+	$arrDirs = array();
+	if ($dir = opendir($strBackupDir)) {
+		while (($file = readdir($dir)) !== false) {
+			if ($file != "." && $file != "..") {
+				array_push($arrDirs, $file);
+			}
+		} 
+		closedir($dir);
+	}
+
+	sort($arrDirs);
+
+	print("<ul>\n");
+	foreach($arrDirs as $val){
+		print "<li>".htmlspecialchars($val)."</li>\n";
+	}
+	print("</ul>\n");
+
+}
+
+
+// *********************
 // svnコマンドのバージョン番号（文字列）を返す関数
 // *********************
 function get_svn_version() {
@@ -433,9 +578,4 @@ function get_svn_version() {
 }
 ?>
 
-</div>	<!-- id="main_content_right" -->
-<p>&nbsp;</p>
-
-</body>
-</html>
 
