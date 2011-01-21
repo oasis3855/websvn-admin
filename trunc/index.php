@@ -10,6 +10,7 @@ $strVersion = '0.2';	// 画面に表示するバージョン
 //     http://oasis.halfmoon.jp/
 //
 // version 0.1 (2011/01/16)
+// version 0.2 (2011/01/20)
 //
 // GNU GPL Free Software
 //
@@ -64,6 +65,12 @@ if(!isset($strSvnCmdPath) || !isset($strBaseDir) || !isset($strBackupDir)){
 	die;
 }
 
+// execコマンドに渡す変数の汚染除去（エスケープ）
+$strSvnCmdPath = escapeshellcmd($strSvnCmdPath);
+$strBaseDir = escapeshellcmd($strBaseDir);
+$strBackupDir = escapeshellcmd($strBackupDir);
+
+
 $nResult = CheckAuthDataFile();
 if($nResult == 0){
 ?>
@@ -96,7 +103,6 @@ if(!$strReturn)
 <div id="main_content_left">
 <h2>System</h2>
 <p><?php echo date('Y/m/d  H:i:s', time()) ; ?><br />
-WebSVN-Admin &nbsp;<?php echo $strVersion; ?><br />
 Subversion &nbsp;<?php echo get_svn_version(); ?></p>
 <h2>Menu</h2>
 <ul>
@@ -108,9 +114,7 @@ Subversion &nbsp;<?php echo get_svn_version(); ?></p>
 <h2>Repositories</h2>
 <?php
 
-// *********************
 // 既存リポジトリ一覧を表示（左側ペイン）
-// *********************
 display_repositories();
 
 ?>
@@ -120,73 +124,54 @@ display_repositories();
 <?php
 
 // *********************
-// バックアップディレクトリの一覧
+// プログラム引数によって処理分岐
 // *********************
+
+// バックアップディレクトリの一覧
 if(isset($_GET['mode']) && $_GET['mode'] === 'backuplist'){
 	display_backup_list();
 }
-// *********************
 // 新規リポジトリ作成
-// *********************
 elseif(isset($_GET['mode']) && $_GET['mode'] === 'makerepo' && isset($_POST['newrepo']) && strlen($_POST['newrepo'])>0){
 	$strRepo = trim($_POST['newrepo']);
 	create_new_repository($strRepo);
 }
-// *********************
 // ログアウト
-// *********************
 elseif(isset($_GET['mode']) && $_GET['mode'] === 'logout'){
 	LogoffAuth();
-?>
-<h1>Logout</h1>
-<p>ログアウトしました</p>
-<?php
+	print("<h1>Logout</h1>\n<p>ログアウトしました</p>\n");
 }
-// *********************
 // ユーザ名・パスワード変更
-// *********************
 elseif(isset($_GET['mode']) && $_GET['mode'] === 'chgpasswd'){
 	print("<h1>Change User and Password (ユーザ名、パスワード変更)</h1>\n");
 	print("<p>".ChangePassword($strFilenameThis, 'svnadmin-create')."</p>\n");
 }
-// *********************
 // 既存リポジトリの情報表示（バックアップ、削除サブメニュー表示）
-// *********************
 elseif(isset($_GET['mode']) && $_GET['mode'] === 'inforepo' && isset($_GET['reponame'])){
 	$strRepo = $_GET['reponame'];
 	info_repository($strRepo);
 }
-// *********************
 // 既存リポジトリのベリファイ
-// *********************
 elseif(isset($_GET['mode']) && $_GET['mode'] === 'verify' && isset($_GET['reponame'])){
 	$strRepo = $_GET['reponame'];
 	verify_repository($strRepo);
 }
-// *********************
 // 既存リポジトリのバックアップ（hotcopy）
-// *********************
 elseif(isset($_GET['mode']) && $_GET['mode'] === 'hotcopy' && isset($_GET['reponame'])){
 	$strRepo = $_GET['reponame'];
 	hotcopy_repository($strRepo, 0);
 }
-// *********************
 // 既存リポジトリのバックアップ（dump）
-// *********************
 elseif(isset($_GET['mode']) && $_GET['mode'] === 'dump' && isset($_GET['reponame'])){
 	$strRepo = $_GET['reponame'];
 	dump_repository($strRepo);
 }
-// *********************
 // リポジトリの削除
-// *********************
 elseif(isset($_GET['mode']) && $_GET['mode'] === 'remove' && isset($_GET['reponame'])){
 	$strRepo = $_GET['reponame'];
 	remove_repository($strRepo);
 }
-// *********************
 // 新規リポジトリ作成 入力画面
-// *********************
 else{
 	// 引数が何もなかった場合、新規リポジトリ名の入力画面を表示
 	input_new_repository();
@@ -211,6 +196,7 @@ exit();
 // *********************
 function display_repositories() {
 	global $strBaseDir;
+	global $strFilenameThis;
 
 	$arrDirs = array();
 	if ($dir = opendir($strBaseDir)) {
@@ -237,6 +223,7 @@ function display_repositories() {
 // 新規リポジトリ名入力画面
 // *********************
 function input_new_repository() {
+	global $strFilenameThis;
 ?>
 
 <h1>Create New Repository (リポジトリ作成)</h1>
@@ -300,6 +287,7 @@ function create_new_repository($strRepo) {
 function info_repository($strRepo) {
 	global $strSvnCmdPath;
 	global $strBaseDir;
+	global $strFilenameThis;
 
 	print("<h1>Repository Administration (リポジトリ管理)</h1>\n");
 	print("<p>リポジトリ名 : ".htmlspecialchars($strRepo)."</p>\n");
@@ -315,7 +303,6 @@ function info_repository($strRepo) {
 	exec($strSvnCmdPath."svnlook youngest ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
 	if($nResult != 0){
 		print("<p class=\"error\">svnlook youngestコマンドが実行できません</p>\n");
-		return;
 	}
 	if(count($arrStdout) >= 1){ $strRevNo = $arrStdout[0]; }
 	$arrStdout = array();
@@ -325,7 +312,6 @@ function info_repository($strRepo) {
 	exec($strSvnCmdPath."svnlook author ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
 	if($nResult != 0){
 		print("<p class=\"error\">svnlook authorコマンドが実行できません</p>\n");
-		return;
 	}
 	if(count($arrStdout) >= 1){ $strAuthor = $arrStdout[0]; }
 	$arrStdout = array();
@@ -335,7 +321,6 @@ function info_repository($strRepo) {
 	exec($strSvnCmdPath."svnlook date ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
 	if($nResult != 0){
 		print("<p class=\"error\">svnlook dateコマンドが実行できません</p>\n");
-		return;
 	}
 	if(count($arrStdout) >= 1){ $strDate = $arrStdout[0]; }
 	
@@ -397,6 +382,8 @@ function verify_repository($strRepo) {
 // *********************
 // 既存リポジトリのバックアップ（hotcopy）
 // *********************
+// 引数 $flag_mode : 0のとき、処理のタイトルを表示する
+// 戻り値 0:失敗, 1:成功
 function hotcopy_repository($strRepo, $flag_mode) {
 	global $strSvnCmdPath;
 	global $strBaseDir;
@@ -410,14 +397,14 @@ function hotcopy_repository($strRepo, $flag_mode) {
 	// リポジトリ名に不正な文字が入っていないか検査
 	if(!preg_match("/^[A-Za-z0-9\-]+$/", $strRepo) || $strRepo[0] == '-' || $strRepo[strlen($strRepo)-1] == '-' || strlen($strRepo) > 20 || strlen($strRepo) <= 0){
 		print("<p class=\"error\">不正なリポジトリ名が指定されました</p>\n");
-		return;
+		return(0);
 	}
 
 	// バックアップ先ディレクトリが既存でないか検査
 	$strBackupBasename = $strRepo.'-'.date('Ymd-Hi', time());
 	if(file_exists($strBackupDir.$strBackupBasename)){
 		print("<p class=\"error\">バックアップ先に同じ名称のディレクトリがあります</p>\n");
-		return;
+		return(0);
 	}
 
 	print("<p>コマンド実行中 ... (svnadmin hotcopy ".htmlspecialchars($strRepo)." ".htmlspecialchars($strBackupBasename).")</p>\n");
@@ -425,8 +412,24 @@ function hotcopy_repository($strRepo, $flag_mode) {
 	// バックアップコマンドを実行
 	exec($strSvnCmdPath."svnadmin hotcopy ".$strBaseDir.$strRepo." ".$strBackupDir.$strBackupBasename." 2>&1", $arrStdout, $nResult);
 	if($nResult != 0){
-		print("<p class=\"error\">バックアップに失敗しました</p>\n");
-		return;
+		print("<p class=\"info\">バックアップに失敗しました。単純コピーを試します</p>\n");
+		print("<p>コマンド実行中 ... (cp -Rv ".htmlspecialchars($strRepo)." ".htmlspecialchars($strBackupBasename).")</p>\n");
+		$arrStdout = array();
+		exec("cp -Rv ".$strBaseDir.$strRepo." ".$strBackupDir.$strBackupBasename." 2>&1", $arrStdout, $nResult);
+		// コマンドのStdout出力がある場合
+		if(count($arrStdout)>0){
+			print("<pre>\n\n");
+			foreach($arrStdout as $str){
+				print($str."\n");
+			}
+			print("</pre>\n");
+		}
+		if($nResult != 0){
+			print("<p class=\"error\">単純コピーも出来ません。バックアップに失敗しました</p>\n");
+			return(0);
+		}
+		print("<p class=\"ok\">hotcopyは失敗しましたが、単純コピーは完了しました</p>\n");
+		return(1);
 	}
 	// コマンドのStdout出力がある場合
 	if(count($arrStdout)>0){
@@ -439,7 +442,7 @@ function hotcopy_repository($strRepo, $flag_mode) {
 	else{
 		print("<p class=\"ok\">バックアップが完了しました</p>\n");
 	}
-	return;
+	return(1);
 }
 
 // *********************
@@ -494,6 +497,7 @@ function dump_repository($strRepo) {
 function remove_repository($strRepo) {
 	global $strSvnCmdPath;
 	global $strBaseDir;
+	global $strBackupDir;
 
 	print("<h1>Remove Repository (リポジトリ削除)</h1>\n");
 	print("<p>リポジトリ名 : ".htmlspecialchars($strRepo)."</p>\n");
@@ -506,10 +510,12 @@ function remove_repository($strRepo) {
 
 	// バックアップ（hotcopy）
 	print("<p class=\"info\">削除前に、バックアップを行います</p>\n");
-	hotcopy_repository($strRepo, 1);
+	if(!hotcopy_repository($strRepo, 1)){
+		print("<p class=\"error\">対象リポジトリがバックアップできないため、削除を中止します</p>\n");
+		return;
+	}
 
 	print("<p>コマンド実行中 ... (rm -rfv ".htmlspecialchars($strRepo).")</p>\n");
-
 	// 削除
 	exec("rm -rfv ".$strBaseDir.$strRepo." 2>&1", $arrStdout, $nResult);
 	if($nResult != 0){
