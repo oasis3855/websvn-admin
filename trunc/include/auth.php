@@ -8,6 +8,7 @@
 //
 // version 1.0 (2010/02/21)
 // version 1.1 (2011/01/16)
+// version 1.2 (2011/01/22)
 //
 // GNU GPL Free Software
 //
@@ -39,9 +40,9 @@ $strAuthDataFile = 'data/auth.dat';
 //
 // 認証状態はセッションに格納される（認証ログオフは、LogoffAuth 関数）
 //
-// 認証されている場合 TRUE を返す
-// 認証されていない場合 FALSE を返す
-function CheckAuth($strReloadPage, $strLogPage)
+// 認証されている場合 1 を返す
+// 認証されていない場合 0 を返す
+function CheckAuth($strReloadPage, $flag_check_only)
 {
 	if(!isset($_SESSION)){ session_start(); }
 	$strAuthUser = '';	// 認証されたユーザ名
@@ -49,8 +50,11 @@ function CheckAuth($strReloadPage, $strLogPage)
 	if (isset($_SESSION['svnadmin-user']))
 	{
 		// 既にログオンしてている場合
-		$strAuthUser = $_SESSION['svnadmin-user'];
-		return($strAuthUser);
+		return(1);		// 認証成功
+	}
+	elseif(isset($flag_check_only) && $flag_check_only == 1){
+		// ログオンしていない場合で、結果のみ返す場合
+		return(0);
 	}
 	elseif(!isset($_POST['user']) || !isset($_POST['password'])){
 		// 新規入力画面を表示する
@@ -64,7 +68,7 @@ function CheckAuth($strReloadPage, $strLogPage)
 		print("\t</table>\n");
 		print("</form>\n");
 
-		return($strAuthUser);
+		return(0);		// 認証失敗
 	}
 	else {
 		// DBを参照して、認証チェックを行う
@@ -72,12 +76,12 @@ function CheckAuth($strReloadPage, $strLogPage)
 		if($strAuthUser != '') {
 			// 認証OK
 			$_SESSION['svnadmin-user'] = $strAuthUser;
-			return($strAuthUser);
+			return(1);		// 認証成功
 		}
 	}
 
 	// 認証失敗
-	return($strAuthUser);
+	return(0);
 
 }
 
@@ -155,7 +159,7 @@ function CheckAuthDataFile(){
 		return(-1);	// 認証ファイルが作成できない
 	}
 
-	return(0);
+	return(0);		// 認証ファイルを新規作成した
 }
 
 // ユーザ名、パスワードをチェック
